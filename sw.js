@@ -1,5 +1,5 @@
-// Cache solo la "scocca" dell'app, così si apre anche offline; la musica arriva sempre in streaming.
-const CACHE = 'sonora-v1';
+﻿// Cache solo la "scocca" dell'app, cosi' si apre anche offline; la musica arriva sempre in streaming.
+const CACHE = 'sonora-v2';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

@@ -89,7 +89,18 @@ h1{font:700 clamp(26px,4vw,38px)/1.05 var(--display);letter-spacing:-.025em;marg
 input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 .vol{display:flex;gap:6px;align-items:center;justify-content:flex-end}
 .vol input{max-width:120px}
+.ytbox{position:fixed;z-index:5;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(var(--pbh,100px) + 12px);
+  width:min(360px,calc(100vw - 32px));aspect-ratio:16/9;min-height:200px;border-radius:12px;overflow:hidden;background:#000;
+  box-shadow:0 12px 32px rgba(0,0,0,.35);border:1px solid var(--line)}
+.ytbox iframe{width:100%;height:100%;display:block;border:0}
+body.has-yt main{padding-bottom:250px}
+.setup{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;max-width:640px;display:flex;flex-direction:column;gap:12px}
+.setup ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.setup a{color:var(--accent)}
+.setup .err{color:var(--live);font-size:13px;min-height:1.2em;margin:0}
+.linkbtn{color:var(--muted);font-size:13px;text-decoration:underline;padding:4px 0;margin-top:14px}
 @media (max-width:760px){
+  .ytbox{left:max(16px,env(safe-area-inset-left,0px));width:auto}
   .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
   aside{min-width:0}
   aside{border-right:0;border-bottom:1px solid var(--line);padding:10px max(12px,env(safe-area-inset-left,0px)) 6px;gap:6px}
@@ -115,13 +126,14 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       Sonora
     </div>
     <nav class="nav" role="tablist" aria-label="Sorgenti">
-      <button role="tab" data-view="tracks" aria-selected="true"><span class="dot"></span>Brani</button>
+      <button role="tab" data-view="yt" aria-selected="true"><span class="dot"></span>YouTube</button>
+      <button role="tab" data-view="tracks" aria-selected="false"><span class="dot"></span>Brani</button>
       <button role="tab" data-view="radio" aria-selected="false"><span class="dot"></span>Radio dal mondo</button>
       <button role="tab" data-view="local" aria-selected="false"><span class="dot"></span>I miei file</button>
       <button role="tab" data-view="favs" aria-selected="false"><span class="dot"></span>Preferiti</button>
       <button role="tab" data-view="queue" aria-selected="false"><span class="dot"></span>In coda</button>
     </nav>
-    <p class="side-note">Brani completi da Audius, oltre 40.000 radio da Radio Browser e la tua musica dal dispositivo.</p>
+    <p class="side-note">Video musicali da YouTube, brani completi da Audius, oltre 40.000 radio e la tua musica dal dispositivo.</p>
   </aside>
   <main id="main"></main>
 </div>
@@ -146,6 +158,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
     <input type="range" id="vol" min="0" max="100" value="85" aria-label="Volume">
   </div>
 </footer>
+<div class="ytbox" id="ytbox" hidden><div id="ytplayer"></div></div>
 <audio id="audio" preload="none"></audio>
 
 <script>
@@ -194,6 +207,31 @@ const httpsOnly = location.protocol === 'https:';
 const mapStation = s => ({ id:'r:'+s.stationuuid, kind:'radio', title:s.name.trim(), artist:[s.country, (s.tags||'').split(',').slice(0,3).join(', ')].filter(Boolean).join(' · '),
   art:s.favicon || '', stream:s.url_resolved || s.url });
 
+/* ---------- YouTube (API ufficiale: ricerca con chiave personale, riproduzione col player ufficiale) ---------- */
+const ytKey = () => { try { return localStorage.getItem('sonora.ytkey') || '' } catch { return '' } };
+const decode = s => { const t = document.createElement('textarea'); t.innerHTML = s; return t.value; };
+const isoDur = d => { const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(d || ''); return m ? (+m[1]||0)*3600 + (+m[2]||0)*60 + (+m[3]||0) : 0; };
+async function ytApi(path, params, key = ytKey()){
+  const u = new URL('https://www.googleapis.com/youtube/v3/' + path);
+  for (const [k, v] of Object.entries({...params, key})) u.searchParams.set(k, v);
+  const r = await fetch(u); const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error?.message || r.status); e.reason = j.error?.errors?.[0]?.reason || j.error?.details?.[0]?.reason || ''; e.status = r.status; throw e; }
+  return j;
+}
+function ytErrMsg(e){
+  if (e.reason === 'quotaExceeded') return 'Hai esaurito le ricerche gratuite di oggi (circa 100 al giorno). Ripartono domani mattina.';
+  if (/API_KEY_INVALID|keyInvalid|badRequest/.test(e.reason) || e.status === 400) return 'La chiave API non è valida. Controlla di averla copiata per intero.';
+  if (e.status === 403) return 'La chiave non è abilitata per YouTube o non accetta richieste da questo sito. Controlla di aver abilitato “YouTube Data API v3”.';
+  return 'Non riesco a raggiungere YouTube. Controlla la connessione e riprova.';
+}
+const mapVideo = v => ({ id:'y:'+v.id, kind:'yt', vid:v.id, title:decode(v.snippet.title), artist:decode(v.snippet.channelTitle),
+  art:v.snippet.thumbnails?.medium?.url || v.snippet.thumbnails?.default?.url || '', duration:isoDur(v.contentDetails?.duration) });
+async function ytVideos(ids){
+  if (!ids.length) return [];
+  const j = await ytApi('videos', {part:'snippet,contentDetails', id: ids.join(',')});
+  return j.items.map(mapVideo);
+}
+
 /* ---------- viste ---------- */
 const GENRES = ['pop','rock','hip-hop','jazz','classica','elettronica','lo-fi','reggaeton','metal','italiana','80s','chill'];
 const RTAGS = {classica:'classical', elettronica:'electronic', italiana:'italian'};
@@ -219,12 +257,42 @@ function searchBar(ph, val=''){
 }
 function chips(active){ return `<div class="chips">${GENRES.map(g => `<button class="chip" data-g="${g}" aria-pressed="${g===active}">${g}</button>`).join('')}</div>`; }
 
-let lastQ = {tracks:'', radio:''}, lastG = {tracks:'', radio:''};
+let lastQ = {tracks:'', radio:'', yt:''}, lastG = {tracks:'', radio:'', yt:''}, ytCache = null;
+const YT_SETUP = `<div class="setup">
+  <strong>Collega YouTube (una volta sola, gratis)</strong>
+  <span>Per cercare su YouTube serve una chiave API personale di Google. Resta salvata solo in questo browser: ripeti il passaggio su ogni dispositivo.</span>
+  <ol>
+    <li>Apri la <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud Console</a> e crea un progetto (qualsiasi nome).</li>
+    <li>Apri <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">YouTube Data API v3</a> e premi <b>Abilita</b>.</li>
+    <li>Vai su <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Credenziali</a> → <b>Crea credenziali</b> → <b>Chiave API</b>.</li>
+    <li>Copia la chiave e incollala qui sotto.</li>
+  </ol>
+  <form class="search" id="kf"><input id="ytkey" type="password" placeholder="Incolla la chiave API (inizia con AIza…)" autocomplete="off"><button class="btn">Salva chiave</button></form>
+  <p class="err" id="kerr"></p>
+</div>`;
 async function show(v){
   view = v;
   document.querySelectorAll('.nav button').forEach(b => b.setAttribute('aria-selected', b.dataset.view === v));
   try { localStorage.setItem('sonora.view', v) } catch {}
-  if (v === 'tracks'){
+  if (v === 'yt'){
+    const head = header('Cerca su YouTube', 'Qualsiasi canzone, album, live o concerto. Sul PC la musica continua anche se riduci a icona la finestra o cambi scheda.');
+    if (!ytKey()){
+      main.innerHTML = head + YT_SETUP;
+      $('#kf').onsubmit = async e => {
+        e.preventDefault(); const k = $('#ytkey').value.trim(); if (!k) return;
+        $('#kerr').textContent = 'Verifico la chiave…';
+        try { await ytApi('videos', {part:'id', chart:'mostPopular', maxResults:'1'}, k); try { localStorage.setItem('sonora.ytkey', k) } catch {} show('yt'); }
+        catch (err) { $('#kerr').textContent = ytErrMsg(err); }
+      };
+      return;
+    }
+    main.innerHTML = head + searchBar('Es. Vasco Rossi Albachiara, lo-fi da studiare…', lastQ.yt) + chips(lastG.yt)
+      + '<div class="status" id="st"></div><div id="res"></div><button class="linkbtn" id="rmkey">Cambia o rimuovi la chiave YouTube</button>';
+    bindSearch(loadYouTube);
+    $('#rmkey').onclick = () => { try { localStorage.removeItem('sonora.ytkey') } catch {} ytCache = null; show('yt'); };
+    if (ytCache && (lastQ.yt || lastG.yt)) { markChips(lastG.yt); setStatus(ytCache.label); $('#res').innerHTML = renderList(ytCache.items, ''); }
+    else loadYouTube(lastQ.yt, lastG.yt);
+  } else if (v === 'tracks'){
     main.innerHTML = header('Ascolta qualsiasi brano', 'Cerca per titolo, artista o genere. Brani completi in streaming da Audius, una piattaforma musicale aperta.')
       + searchBar('Es. lo-fi, house, nome di un artista…', lastQ.tracks) + chips(lastG.tracks) + '<div class="status" id="st"></div><div id="res"></div>';
     bindSearch(loadTracks);
@@ -259,6 +327,25 @@ function bindSearch(fn){
 function setStatus(t){ const s = $('#st'); if (s) s.textContent = t; }
 function markChips(g){ main.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.g === g)); }
 
+async function loadYouTube(q, g){
+  lastQ.yt = q; lastG.yt = g; markChips(g);
+  setStatus(q || g ? `Cerco “${q || g}” su YouTube…` : 'Carico la musica più vista in Italia…');
+  try {
+    let items, label;
+    if (q || g){
+      const s = await ytApi('search', {part:'snippet', type:'video', videoEmbeddable:'true', maxResults:'25', q: q || `${g} music`, regionCode:'IT', relevanceLanguage:'it'});
+      items = await ytVideos(s.items.map(i => i.id.videoId).filter(Boolean));
+      label = `${items.length} risultati`;
+    } else {
+      const j = await ytApi('videos', {part:'snippet,contentDetails', chart:'mostPopular', videoCategoryId:'10', regionCode:'IT', maxResults:'30'});
+      items = j.items.map(mapVideo); label = 'Musica più vista in Italia oggi';
+    }
+    ytCache = {items, label};
+    if (view !== 'yt') return;
+    setStatus(label);
+    $('#res').innerHTML = renderList(items, 'Nessun video trovato. Prova con altre parole.');
+  } catch (e) { setStatus(ytErrMsg(e)); }
+}
 async function loadTracks(q, g){
   lastQ.tracks = q; lastG.tracks = g; markChips(g);
   setStatus(q ? `Cerco “${q}”…` : g ? `Cerco ${g}…` : 'Carico i brani di tendenza…');
@@ -307,14 +394,74 @@ async function streamUrl(it){
   }
   return it.stream;
 }
+/* motore: 'audio' (Audius, radio, file) oppure 'yt' (player ufficiale YouTube) */
+let engine = 'audio', yt = null, ytReady = null;
+function loadYT(){
+  if (ytReady) return ytReady;
+  ytReady = new Promise((res, rej) => {
+    window.onYouTubeIframeAPIReady = () => {
+      yt = new YT.Player('ytplayer', { width:'100%', height:'100%',
+        playerVars:{ autoplay:1, playsinline:1, rel:0 },
+        events:{
+          onReady: () => { yt.setVolume(+$('#vol').value); res(yt); },
+          onStateChange: e => {
+            if (engine !== 'yt') return;
+            if (e.data === YT.PlayerState.PLAYING) setPlaying(true);
+            if (e.data === YT.PlayerState.PAUSED) setPlaying(false);
+            if (e.data === YT.PlayerState.ENDED) { if (repeat && queue.length === 1) yt.seekTo(0); else next(); }
+          },
+          onError: () => { if (engine === 'yt') skip('Questo video non si può riprodurre fuori da YouTube'); }
+        }});
+    };
+    const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api';
+    s.onerror = () => { ytReady = null; rej(new Error('yt')); };
+    document.head.appendChild(s);
+  });
+  return ytReady;
+}
+function skip(msg = 'Questa sorgente non è disponibile'){
+  $('#pSub').textContent = msg + ', passo alla successiva…';
+  if (qi + 1 < queue.length || shuffle || repeat) setTimeout(next, 1500);
+}
+function setYtVisible(on){
+  $('#ytbox').hidden = !on; document.body.classList.toggle('has-yt', on);
+}
 async function playAt(i){
   if (i < 0 || i >= queue.length) return;
   qi = i; const it = queue[i];
   $('#pTitle').textContent = it.title; $('#pSub').textContent = it.artist;
-  $('#pArt').innerHTML = it.art ? `<img src="${esc(it.art)}" alt="" onerror="this.remove()">` : esc((it.title||'♪')[0]);
-  audio.src = await streamUrl(it);
-  try { await audio.play() } catch (e) { $('#pSub').textContent = 'Questa sorgente non è disponibile, passo alla successiva…'; setTimeout(next, 1500); }
-  updateMedia(it); refreshRows();
+  const letter = esc((it.title||'♪').trim()[0] || '♪');
+  $('#pArt').innerHTML = it.art ? `<img src="${esc(it.art)}" alt="" onerror="this.replaceWith('${letter.replace(/'/g,'')}')">` : letter;
+  refreshRows();
+  if (it.kind === 'yt'){
+    engine = 'yt';
+    audio.pause(); audio.removeAttribute('src');
+    setYtVisible(true);
+    try { const p = await loadYT(); p.loadVideoById(it.vid); }
+    catch { skip('YouTube non risponde'); }
+  } else {
+    engine = 'audio';
+    if (yt) yt.stopVideo();
+    setYtVisible(false);
+    audio.src = await streamUrl(it);
+    try { await audio.play() } catch { skip(); }
+  }
+  updateMedia(it);
+}
+function setPlaying(on){
+  playIcon.innerHTML = on ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>' : '<path d="M7 4v16l13-8z"/>';
+  $('#bPlay').setAttribute('aria-label', on ? 'Pausa' : 'Riproduci');
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = on ? 'playing' : 'paused';
+}
+function togglePlay(force){
+  if (qi < 0){ if (results.length) playFrom(results, 0); return; }
+  if (engine === 'yt'){
+    if (!yt) return;
+    const playing = yt.getPlayerState() === 1;
+    if (force === 'play' || (!force && !playing)) yt.playVideo(); else yt.pauseVideo();
+  } else {
+    if (force === 'play' || (!force && audio.paused)) audio.play(); else audio.pause();
+  }
 }
 function playFrom(list, i){ queue = [...list]; playAt(i); }
 function next(){
@@ -323,17 +470,21 @@ function next(){
   else if (qi + 1 < queue.length) playAt(qi + 1);
   else if (repeat) playAt(0);
 }
-function prev(){ if (audio.currentTime > 4) audio.currentTime = 0; else if (qi > 0) playAt(qi - 1); }
+function prev(){
+  const [cur] = curTimes();
+  if (cur > 4) engine === 'yt' ? yt.seekTo(0, true) : (audio.currentTime = 0);
+  else if (qi > 0) playAt(qi - 1);
+}
 function refreshRows(){
   main.querySelectorAll('.row').forEach(r => r.classList.toggle('playing', results[r.dataset.i]?.id === queue[qi]?.id));
 }
 function updateMedia(it){
   if (!('mediaSession' in navigator)) return;
-  navigator.mediaSession.metadata = new MediaMetadata({ title:it.title, artist:it.artist, album: it.kind==='radio' ? 'Radio' : 'Sonora',
+  navigator.mediaSession.metadata = new MediaMetadata({ title:it.title, artist:it.artist, album: it.kind==='radio' ? 'Radio' : it.kind==='yt' ? 'YouTube' : 'Sonora',
     artwork: it.art ? [{src:it.art, sizes:'150x150'}] : [] });
   const ms = navigator.mediaSession;
-  ms.setActionHandler('play', () => audio.play());
-  ms.setActionHandler('pause', () => audio.pause());
+  ms.setActionHandler('play', () => togglePlay('play'));
+  ms.setActionHandler('pause', () => togglePlay('pause'));
   ms.setActionHandler('nexttrack', next);
   ms.setActionHandler('previoustrack', prev);
 }
@@ -356,33 +507,46 @@ main.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ')
 document.querySelectorAll('.nav button').forEach(b => b.onclick = () => show(b.dataset.view));
 
 const playIcon = $('#playIcon');
-$('#bPlay').onclick = () => { if (!audio.src) { if (results.length) playFrom(results, 0); return; } audio.paused ? audio.play() : audio.pause(); };
+$('#bPlay').onclick = () => togglePlay();
 $('#bNext').onclick = next; $('#bPrev').onclick = prev;
 $('#bShuffle').onclick = e => { shuffle = !shuffle; e.currentTarget.setAttribute('aria-pressed', shuffle) };
 $('#bRepeat').onclick = e => { repeat = !repeat; e.currentTarget.setAttribute('aria-pressed', repeat) };
-audio.onplay = () => { playIcon.innerHTML = '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>'; $('#bPlay').setAttribute('aria-label','Pausa') };
-audio.onpause = () => { playIcon.innerHTML = '<path d="M7 4v16l13-8z"/>'; $('#bPlay').setAttribute('aria-label','Riproduci') };
-audio.onended = next;
-audio.onerror = () => { if (audio.src) { $('#pSub').textContent = 'Sorgente non disponibile, passo alla successiva…'; setTimeout(next, 1500); } };
+audio.onplay = () => { if (engine === 'audio') setPlaying(true) };
+audio.onpause = () => { if (engine === 'audio') setPlaying(false) };
+audio.onended = () => { if (engine === 'audio') next() };
+audio.onerror = () => { if (engine === 'audio' && audio.getAttribute('src')) skip(); };
 const seek = $('#seek');
 let seeking = false;
-audio.ontimeupdate = () => {
-  $('#tCur').textContent = fmt(audio.currentTime);
-  $('#tDur').textContent = isFinite(audio.duration) ? fmt(audio.duration) : 'Live';
-  if (!seeking && isFinite(audio.duration)) seek.value = audio.currentTime / audio.duration * 1000;
-};
+function curTimes(){
+  if (engine === 'yt' && yt?.getCurrentTime) return [yt.getCurrentTime() || 0, yt.getDuration() || 0];
+  return [audio.currentTime, audio.duration];
+}
+function tick(){
+  if (qi < 0) return;
+  const [cur, dur] = curTimes();
+  $('#tCur').textContent = fmt(cur);
+  $('#tDur').textContent = isFinite(dur) && dur > 0 ? fmt(dur) : (queue[qi]?.kind === 'radio' ? 'Live' : '0:00');
+  if (!seeking && isFinite(dur) && dur > 0) seek.value = cur / dur * 1000;
+}
+audio.ontimeupdate = tick;
+setInterval(() => { if (engine === 'yt') tick() }, 500);
 seek.oninput = () => { seeking = true };
-seek.onchange = () => { if (isFinite(audio.duration)) audio.currentTime = seek.value / 1000 * audio.duration; seeking = false };
+seek.onchange = () => {
+  const [, dur] = curTimes();
+  if (isFinite(dur) && dur > 0){ const t = seek.value / 1000 * dur; engine === 'yt' ? yt.seekTo(t, true) : (audio.currentTime = t); }
+  seeking = false;
+};
 const vol = $('#vol');
 vol.value = store.get('sonora.vol', 85); audio.volume = vol.value / 100;
-vol.oninput = () => { audio.volume = vol.value / 100; store.set('sonora.vol', +vol.value) };
+vol.oninput = () => { audio.volume = vol.value / 100; yt?.setVolume?.(+vol.value); store.set('sonora.vol', +vol.value) };
+new ResizeObserver(() => document.documentElement.style.setProperty('--pbh', $('.player').offsetHeight + 'px')).observe($('.player'));
 document.addEventListener('keydown', e => {
   if (e.target.matches('input')) return;
   if (e.code === 'Space' && !e.target.closest('button,.row')) { e.preventDefault(); $('#bPlay').click(); }
 });
 
-let startView = 'tracks'; try { startView = localStorage.getItem('sonora.view') || 'tracks' } catch {}
-show(['tracks','radio','local','favs','queue'].includes(startView) ? startView : 'tracks');
+let startView = 'yt'; try { startView = localStorage.getItem('sonora.view') || 'yt' } catch {}
+show(['yt','tracks','radio','local','favs','queue'].includes(startView) ? startView : 'yt');
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
