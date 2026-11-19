@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sonora</title>
+<meta name="theme-color" content="#14171f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: sidebar sorgenti + lista brani a sinistra/centro, barra di riproduzione fissa in basso (su telefono: tab in alto, player in basso) */
+:root{
+  --bg:#f3f4f7; --surface:#ffffff; --surface-2:#e8eaf0; --fg:#141821; --muted:#5d6475;
+  --accent:#3550e0; --accent-fg:#ffffff; --line:#d9dce5; --live:#d6403a;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Inter", "Segoe UI", system-ui, sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12151c; --surface:#1b1f29; --surface-2:#252a36; --fg:#e9ecf3; --muted:#9aa1b2;
+  --accent:#7d90ff; --accent-fg:#0d1020; --line:#2c3240; --live:#ff6b62; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12151c; --surface:#1b1f29; --surface-2:#252a36; --fg:#e9ecf3; --muted:#9aa1b2;
+  --accent:#7d90ff; --accent-fg:#0d1020; --line:#2c3240; --live:#ff6b62; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--body);display:flex;flex-direction:column;
+  padding-top:env(safe-area-inset-top,0px)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.app{flex:1;min-height:0;display:grid;grid-template-columns:230px minmax(0,1fr)}
+aside{border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:4px;background:var(--surface)}
+.brand{font:700 26px/1 var(--display);letter-spacing:-.02em;padding:0 10px 18px;display:flex;align-items:center;gap:10px}
+.brand svg{width:28px;height:28px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;text-align:left;font-weight:500;color:var(--muted)}
+.nav button:hover{background:var(--surface-2);color:var(--fg)}
+.nav button[aria-selected="true"]{background:var(--surface-2);color:var(--fg)}
+.nav button[aria-selected="true"] .dot{background:var(--accent)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--line);flex:none}
+.side-note{margin-top:auto;font-size:12px;color:var(--muted);padding:10px}
+main{min-width:0;overflow-y:auto;padding:24px max(16px,env(safe-area-inset-right,0px)) 24px 28px}
+h1{font:700 clamp(26px,4vw,38px)/1.05 var(--display);letter-spacing:-.025em;margin:0 0 6px;text-wrap:balance}
+.sub{color:var(--muted);margin:0 0 18px;max-width:62ch}
+.search{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.search input{flex:1;min-width:0;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:inherit}
+.btn{padding:11px 18px;border-radius:12px;background:var(--accent);color:var(--accent-fg);font-weight:600}
+.btn.ghost{background:var(--surface-2);color:var(--fg)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+.chip{padding:6px 12px;border-radius:999px;border:1px solid var(--line);font-size:13px;color:var(--muted)}
+.chip:hover,.chip[aria-pressed="true"]{border-color:var(--accent);color:var(--fg)}
+.status{color:var(--muted);font-size:13px;margin:6px 0 10px;min-height:1.2em}
+.list{display:flex;flex-direction:column}
+.row{display:grid;grid-template-columns:44px minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:8px 10px;border-radius:10px;cursor:pointer}
+.row:hover{background:var(--surface-2)}
+.row.playing{background:var(--surface-2)}
+.row.playing .t1{color:var(--accent)}
+.art{width:44px;height:44px;border-radius:8px;background:var(--surface-2);object-fit:cover;display:grid;place-items:center;font:700 16px var(--display);color:var(--muted);overflow:hidden}
+.art img{width:100%;height:100%;object-fit:cover}
+.meta{min-width:0}
+.t1{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t2{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dur{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.fav{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
+.fav:hover{background:var(--surface)}
+.fav[aria-pressed="true"]{color:var(--live)}
+.fav svg{width:18px;height:18px}
+.tag-live{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--live);text-transform:uppercase}
+.drop{border:1.5px dashed var(--line);border-radius:14px;padding:22px;text-align:center;color:var(--muted);margin-bottom:16px}
+.drop.over{border-color:var(--accent);color:var(--fg)}
+.empty{padding:30px 10px;color:var(--muted);text-align:center}
+/* player */
+.player{border-top:1px solid var(--line);background:var(--surface);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) minmax(0,1fr);gap:16px;align-items:center;
+  padding:12px max(16px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.now{display:flex;gap:12px;align-items:center;min-width:0}
+.now .art{width:52px;height:52px}
+.controls{display:flex;flex-direction:column;gap:6px;align-items:center}
+.cbtns{display:flex;gap:6px;align-items:center}
+.ic{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
+.ic:hover{color:var(--fg);background:var(--surface-2)}
+.ic[aria-pressed="true"]{color:var(--accent)}
+.ic svg{width:20px;height:20px}
+.play{width:48px;height:48px;background:var(--fg);color:var(--bg)}
+.play:hover{background:var(--fg);color:var(--bg);transform:scale(1.05)}
+.seek{display:flex;gap:10px;align-items:center;width:100%;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
+.vol{display:flex;gap:6px;align-items:center;justify-content:flex-end}
+.vol input{max-width:120px}
+@media (max-width:760px){
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+  aside{min-width:0}
+  aside{border-right:0;border-bottom:1px solid var(--line);padding:10px max(12px,env(safe-area-inset-left,0px)) 6px;gap:6px}
+  .brand{padding:2px 4px 6px;font-size:22px}
+  .nav{flex-direction:row;overflow-x:auto;scrollbar-width:none}
+  .nav button{white-space:nowrap;padding:8px 12px}
+  .side-note{display:none}
+  main{padding:16px max(16px,env(safe-area-inset-right,0px)) 16px max(16px,env(safe-area-inset-left,0px))}
+  .player{grid-template-columns:1fr auto;gap:8px 12px}
+  .controls{grid-column:1/-1;grid-row:2}
+  .vol{display:none}
+  .row{gap:10px;padding:8px 4px}
+  .row .dur{font-size:12px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="var(--accent)"/><path d="M9 19v-6M13 22V10M17 20v-8M21 23V9M25 18v-4" stroke="var(--accent-fg)" stroke-width="2.2" stroke-linecap="round"/></svg>
+      Sonora
+    </div>
+    <nav class="nav" role="tablist" aria-label="Sorgenti">
+      <button role="tab" data-view="tracks" aria-selected="true"><span class="dot"></span>Brani</button>
+      <button role="tab" data-view="radio" aria-selected="false"><span class="dot"></span>Radio dal mondo</button>
+      <button role="tab" data-view="local" aria-selected="false"><span class="dot"></span>I miei file</button>
+      <button role="tab" data-view="favs" aria-selected="false"><span class="dot"></span>Preferiti</button>
+      <button role="tab" data-view="queue" aria-selected="false"><span class="dot"></span>In coda</button>
+    </nav>
+    <p class="side-note">Brani completi da Audius, oltre 40.000 radio da Radio Browser e la tua musica dal dispositivo.</p>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<footer class="player" aria-label="Riproduzione">
+  <div class="now">
+    <div class="art" id="pArt">♪</div>
+    <div class="meta"><div class="t1" id="pTitle">Niente in riproduzione</div><div class="t2" id="pSub">Scegli un brano o una radio</div></div>
+  </div>
+  <div class="controls">
+    <div class="cbtns">
+      <button class="ic" id="bShuffle" aria-pressed="false" aria-label="Riproduzione casuale"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></button>
+      <button class="ic" id="bPrev" aria-label="Precedente"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+      <button class="ic play" id="bPlay" aria-label="Riproduci"><svg viewBox="0 0 24 24" fill="currentColor" id="playIcon"><path d="M7 4v16l13-8z"/></svg></button>
+      <button class="ic" id="bNext" aria-label="Successivo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+      <button class="ic" id="bRepeat" aria-pressed="false" aria-label="Ripeti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></svg></button>
+    </div>
+    <div class="seek"><span id="tCur">0:00</span><input type="range" id="seek" min="0" max="1000" value="0" aria-label="Posizione"><span id="tDur">0:00</span></div>
+  </div>
+  <div class="vol">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>
+    <input type="range" id="vol" min="0" max="100" value="85" aria-label="Volume">
+  </div>
+</footer>
+<audio id="audio" preload="none"></audio>
+
+<script>
+const APP = 'Sonora';
+const $ = s => document.querySelector(s);
+const main = $('#main'), audio = $('#audio');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = s => !isFinite(s) ? '—' : `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+const store = {
+  get(k, d){ try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)) } catch {} }
+};
+const HEART = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.1 5.3 3 1.7-1.9 3.2-3 5.3-3 3.7 0 5.8 3.8 4.3 7.2C19.5 16.4 12 21 12 21z"/></svg>';
+
+/* ---------- stato ---------- */
+let view = 'tracks', results = [], queue = [], qi = -1, shuffle = false, repeat = false;
+let favs = store.get('sonora.favs', []);
+let localFiles = [];   // {id,title,artist,url,kind:'local'}
+
+/* ---------- Audius (brani completi, gratis, senza chiave) ---------- */
+let audiusHost = null;
+async function audius(path){
+  if (!audiusHost){
+    try { const r = await fetch('https://api.audius.co'); const j = await r.json();
+      audiusHost = j.data[Math.floor(Math.random()*j.data.length)]; }
+    catch { audiusHost = 'https://discoveryprovider.audius.co'; }
+  }
+  const sep = path.includes('?') ? '&' : '?';
+  const r = await fetch(`${audiusHost}/v1${path}${sep}app_name=${APP}`);
+  if (!r.ok) throw new Error('audius ' + r.status);
+  return (await r.json()).data || [];
+}
+const mapTrack = t => ({ id:'a:'+t.id, kind:'track', title:t.title, artist:t.user?.name || '',
+  art:t.artwork?.['150x150'] || '', duration:t.duration, stream:null, aid:t.id, genre:t.genre });
+
+/* ---------- Radio Browser ---------- */
+const RB = ['https://de1.api.radio-browser.info','https://fi1.api.radio-browser.info','https://de2.api.radio-browser.info'];
+async function radio(params){
+  const q = new URLSearchParams({limit:'60', hidebroken:'true', order:'clickcount', reverse:'true', ...params});
+  for (const h of RB){
+    try { const r = await fetch(`${h}/json/stations/search?${q}`); if (r.ok) return await r.json(); } catch {}
+  }
+  throw new Error('radio');
+}
+const httpsOnly = location.protocol === 'https:';
+const mapStation = s => ({ id:'r:'+s.stationuuid, kind:'radio', title:s.name.trim(), artist:[s.country, (s.tags||'').split(',').slice(0,3).join(', ')].filter(Boolean).join(' · '),
+  art:s.favicon || '', stream:s.url_resolved || s.url });
+
+/* ---------- viste ---------- */
+const GENRES = ['pop','rock','hip-hop','jazz','classica','elettronica','lo-fi','reggaeton','metal','italiana','80s','chill'];
+const RTAGS = {classica:'classical', elettronica:'electronic', italiana:'italian'};
+function rowHTML(it, i){
+  const isFav = favs.some(f => f.id === it.id);
+  const cur = queue[qi]?.id === it.id;
+  const letter = esc((it.title||'?').trim()[0] || '?');
+  const art = it.art ? `<img src="${esc(it.art)}" alt="" loading="lazy" onerror="this.replaceWith('${letter.replace(/'/g,'')}')">` : letter;
+  const right = it.kind === 'radio' ? '<span class="tag-live">Live</span>' : `<span class="dur">${it.duration ? fmt(it.duration) : ''}</span>`;
+  const favBtn = it.kind === 'local' ? '<span></span>' : `<button class="fav" data-fav="${i}" aria-pressed="${isFav}" aria-label="Preferito">${HEART}</button>`;
+  return `<div class="row${cur ? ' playing':''}" data-i="${i}" role="button" tabindex="0">
+    <div class="art">${art}</div>
+    <div class="meta"><div class="t1">${esc(it.title)}</div><div class="t2">${esc(it.artist)}</div></div>
+    ${right}${favBtn}</div>`;
+}
+function renderList(items, emptyMsg){
+  results = items;
+  return items.length ? `<div class="list">${items.map(rowHTML).join('')}</div>` : `<div class="empty">${emptyMsg}</div>`;
+}
+function header(title, sub){ return `<h1>${title}</h1><p class="sub">${sub}</p>`; }
+function searchBar(ph, val=''){
+  return `<form class="search" id="sf"><input id="q" type="search" placeholder="${ph}" value="${esc(val)}" autocomplete="off"><button class="btn">Cerca</button></form>`;
+}
+function chips(active){ return `<div class="chips">${GENRES.map(g => `<button class="chip" data-g="${g}" aria-pressed="${g===active}">${g}</button>`).join('')}</div>`; }
+
+let lastQ = {tracks:'', radio:''}, lastG = {tracks:'', radio:''};
+async function show(v){
+  view = v;
+  document.querySelectorAll('.nav button').forEach(b => b.setAttribute('aria-selected', b.dataset.view === v));
+  try { localStorage.setItem('sonora.view', v) } catch {}
+  if (v === 'tracks'){
+    main.innerHTML = header('Ascolta qualsiasi brano', 'Cerca per titolo, artista o genere. Brani completi in streaming da Audius, una piattaforma musicale aperta.')
+      + searchBar('Es. lo-fi, house, nome di un artista…', lastQ.tracks) + chips(lastG.tracks) + '<div class="status" id="st"></div><div id="res"></div>';
+    bindSearch(loadTracks);
+    loadTracks(lastQ.tracks, lastG.tracks);
+  } else if (v === 'radio'){
+    main.innerHTML = header('Radio dal mondo', 'Oltre 40.000 stazioni in diretta, di ogni genere e paese. Cerca per nome, città o genere.')
+      + searchBar('Es. Radio Deejay, jazz, Milano…', lastQ.radio) + chips(lastG.radio) + '<div class="status" id="st"></div><div id="res"></div>';
+    bindSearch(loadRadio);
+    loadRadio(lastQ.radio, lastG.radio);
+  } else if (v === 'local'){
+    main.innerHTML = header('I miei file', 'Ascolta MP3, M4A, FLAC, WAV o OGG dal tuo PC o telefono. I file restano sul dispositivo e non vengono caricati da nessuna parte.')
+      + `<label class="drop" id="drop"><input type="file" id="files" accept="audio/*" multiple hidden>
+         <strong>Scegli file musicali</strong><br><span>oppure trascinali qui</span></label>
+         <div id="res">${renderList(localFiles, 'Nessun file aggiunto. I file restano in questa sessione finché non chiudi la pagina.')}</div>`;
+    const inp = $('#files'), drop = $('#drop');
+    inp.onchange = () => addFiles(inp.files);
+    drop.ondragover = e => { e.preventDefault(); drop.classList.add('over') };
+    drop.ondragleave = () => drop.classList.remove('over');
+    drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); addFiles(e.dataTransfer.files) };
+  } else if (v === 'favs'){
+    main.innerHTML = header('Preferiti', 'Brani e radio che hai salvato con il cuore. Restano salvati in questo browser.')
+      + `<div id="res">${renderList([...favs], 'Ancora nessun preferito. Tocca il cuore accanto a un brano o a una radio.')}</div>`;
+  } else if (v === 'queue'){
+    main.innerHTML = header('In coda', 'La lista che stai ascoltando adesso.')
+      + `<div id="res">${renderList([...queue], 'La coda è vuota.')}</div>`;
+  }
+}
+function bindSearch(fn){
+  $('#sf').onsubmit = e => { e.preventDefault(); fn($('#q').value.trim(), '') };
+  main.querySelectorAll('.chip').forEach(c => c.onclick = () => { $('#q').value=''; fn('', c.dataset.g) });
+}
+function setStatus(t){ const s = $('#st'); if (s) s.textContent = t; }
+function markChips(g){ main.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.g === g)); }
+
+async function loadTracks(q, g){
+  lastQ.tracks = q; lastG.tracks = g; markChips(g);
+  setStatus(q ? `Cerco “${q}”…` : g ? `Cerco ${g}…` : 'Carico i brani di tendenza…');
+  try {
+    let data;
+    if (q || g) data = await audius(`/tracks/search?query=${encodeURIComponent(q || g)}&limit=50`);
+    else data = await audius('/tracks/trending?limit=50');
+    if (view !== 'tracks') return;
+    const items = data.filter(t => t.is_streamable !== false).map(mapTrack);
+    setStatus(q || g ? `${items.length} risultati` : 'Di tendenza adesso');
+    $('#res').innerHTML = renderList(items, 'Nessun brano trovato. Prova con un altro titolo o genere.');
+  } catch { setStatus('Non riesco a raggiungere il catalogo. Controlla la connessione e riprova.'); }
+}
+async function loadRadio(q, g){
+  lastQ.radio = q; lastG.radio = g; markChips(g);
+  setStatus('Cerco le stazioni…');
+  try {
+    let data;
+    if (g) data = await radio({tag: RTAGS[g] || g});
+    else if (q) {
+      const [a, b] = await Promise.all([radio({name:q}), radio({tag:q.toLowerCase()}).catch(()=>[])]);
+      const seen = new Set(); data = [...a, ...b].filter(s => !seen.has(s.stationuuid) && seen.add(s.stationuuid));
+    }
+    else data = await radio({countrycode:'IT'});
+    if (view !== 'radio') return;
+    const items = data.map(mapStation).filter(s => s.stream && (!httpsOnly || s.stream.startsWith('https:')));
+    setStatus(q || g ? `${items.length} stazioni` : 'Le radio italiane più ascoltate');
+    $('#res').innerHTML = renderList(items, 'Nessuna stazione trovata.');
+  } catch { setStatus('Il servizio radio non risponde. Riprova tra poco.'); }
+}
+function addFiles(list){
+  for (const f of list){
+    if (!f.type.startsWith('audio') && !/\.(mp3|m4a|flac|wav|ogg|opus|aac)$/i.test(f.name)) continue;
+    const base = f.name.replace(/\.[^.]+$/, '');
+    const [artist, title] = base.includes(' - ') ? base.split(' - ', 2) : ['', base];
+    localFiles.push({ id:'l:'+f.name+f.size, kind:'local', title:title.trim(), artist:artist.trim() || 'File locale', stream:URL.createObjectURL(f) });
+  }
+  show('local');
+}
+
+/* ---------- riproduzione ---------- */
+async function streamUrl(it){
+  if (it.kind === 'track' && !it.stream){
+    if (!audiusHost) await audius('/tracks/trending?limit=1');
+    it.stream = `${audiusHost}/v1/tracks/${it.aid}/stream?app_name=${APP}`;
+  }
+  return it.stream;
+}
+async function playAt(i){
+  if (i < 0 || i >= queue.length) return;
+  qi = i; const it = queue[i];
+  $('#pTitle').textContent = it.title; $('#pSub').textContent = it.artist;
+  $('#pArt').innerHTML = it.art ? `<img src="${esc(it.art)}" alt="" onerror="this.remove()">` : esc((it.title||'♪')[0]);
+  audio.src = await streamUrl(it);
+  try { await audio.play() } catch (e) { $('#pSub').textContent = 'Questa sorgente non è disponibile, passo alla successiva…'; setTimeout(next, 1500); }
+  updateMedia(it); refreshRows();
+}
+function playFrom(list, i){ queue = [...list]; playAt(i); }
+function next(){
+  if (!queue.length) return;
+  if (shuffle && queue.length > 1){ let n; do n = Math.floor(Math.random()*queue.length); while (n === qi); playAt(n); }
+  else if (qi + 1 < queue.length) playAt(qi + 1);
+  else if (repeat) playAt(0);
+}
+function prev(){ if (audio.currentTime > 4) audio.currentTime = 0; else if (qi > 0) playAt(qi - 1); }
+function refreshRows(){
+  main.querySelectorAll('.row').forEach(r => r.classList.toggle('playing', results[r.dataset.i]?.id === queue[qi]?.id));
+}
+function updateMedia(it){
+  if (!('mediaSession' in navigator)) return;
+  navigator.mediaSession.metadata = new MediaMetadata({ title:it.title, artist:it.artist, album: it.kind==='radio' ? 'Radio' : 'Sonora',
+    artwork: it.art ? [{src:it.art, sizes:'150x150'}] : [] });
+  const ms = navigator.mediaSession;
+  ms.setActionHandler('play', () => audio.play());
+  ms.setActionHandler('pause', () => audio.pause());
+  ms.setActionHandler('nexttrack', next);
+  ms.setActionHandler('previoustrack', prev);
+}
+
+main.addEventListener('click', e => {
+  const fb = e.target.closest('[data-fav]');
+  if (fb){
+    const it = results[fb.dataset.fav];
+    const k = favs.findIndex(f => f.id === it.id);
+    if (k >= 0) favs.splice(k, 1); else favs.unshift({...it, stream: it.kind==='track' ? null : it.stream});
+    store.set('sonora.favs', favs);
+    fb.setAttribute('aria-pressed', k < 0);
+    if (view === 'favs') show('favs');
+    return;
+  }
+  const row = e.target.closest('.row');
+  if (row) playFrom(results, +row.dataset.i);
+});
+main.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('row')){ e.preventDefault(); e.target.click(); } });
+document.querySelectorAll('.nav button').forEach(b => b.onclick = () => show(b.dataset.view));
+
+const playIcon = $('#playIcon');
+$('#bPlay').onclick = () => { if (!audio.src) { if (results.length) playFrom(results, 0); return; } audio.paused ? audio.play() : audio.pause(); };
+$('#bNext').onclick = next; $('#bPrev').onclick = prev;
+$('#bShuffle').onclick = e => { shuffle = !shuffle; e.currentTarget.setAttribute('aria-pressed', shuffle) };
+$('#bRepeat').onclick = e => { repeat = !repeat; e.currentTarget.setAttribute('aria-pressed', repeat) };
+audio.onplay = () => { playIcon.innerHTML = '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>'; $('#bPlay').setAttribute('aria-label','Pausa') };
+audio.onpause = () => { playIcon.innerHTML = '<path d="M7 4v16l13-8z"/>'; $('#bPlay').setAttribute('aria-label','Riproduci') };
+audio.onended = next;
+audio.onerror = () => { if (audio.src) { $('#pSub').textContent = 'Sorgente non disponibile, passo alla successiva…'; setTimeout(next, 1500); } };
+const seek = $('#seek');
+let seeking = false;
+audio.ontimeupdate = () => {
+  $('#tCur').textContent = fmt(audio.currentTime);
+  $('#tDur').textContent = isFinite(audio.duration) ? fmt(audio.duration) : 'Live';
+  if (!seeking && isFinite(audio.duration)) seek.value = audio.currentTime / audio.duration * 1000;
+};
+seek.oninput = () => { seeking = true };
+seek.onchange = () => { if (isFinite(audio.duration)) audio.currentTime = seek.value / 1000 * audio.duration; seeking = false };
+const vol = $('#vol');
+vol.value = store.get('sonora.vol', 85); audio.volume = vol.value / 100;
+vol.oninput = () => { audio.volume = vol.value / 100; store.set('sonora.vol', +vol.value) };
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input')) return;
+  if (e.code === 'Space' && !e.target.closest('button,.row')) { e.preventDefault(); $('#bPlay').click(); }
+});
+
+let startView = 'tracks'; try { startView = localStorage.getItem('sonora.view') || 'tracks' } catch {}
+show(['tracks','radio','local','favs','queue'].includes(startView) ? startView : 'tracks');
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
